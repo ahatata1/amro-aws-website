@@ -10,6 +10,7 @@ import {
 const API_URL =
   'https://156wo9pssc.execute-api.us-east-1.amazonaws.com'
 
+
 async function getAccessToken() {
   const session = await fetchAuthSession()
 
@@ -17,11 +18,14 @@ async function getAccessToken() {
     session.tokens?.accessToken?.toString()
 
   if (!token) {
-    throw new Error('No Cognito access token found')
+    throw new Error(
+      'No Cognito access token found'
+    )
   }
 
   return token
 }
+
 
 function getStatusMessage(status) {
   if (status === 'TEXTRACT_SUBMITTED') {
@@ -29,44 +33,114 @@ function getStatusMessage(status) {
   }
 
   if (status === 'TEXTRACT_DONE') {
-    return 'Creating vocabulary exercises...'
+    return 'Creating your homework...'
   }
 
   if (status === 'EXERCISES_DONE') {
-    return 'Exercises ready ✅'
+    return 'Homework ready ✅'
   }
 
   return 'Processing your document...'
 }
 
+
 export default function App() {
-  const [user, setUser] = useState(null)
-  const [loadingUser, setLoadingUser] = useState(true)
+  const [user, setUser] =
+    useState(null)
 
-  const [selectedFile, setSelectedFile] = useState(null)
-  const [uploadStatus, setUploadStatus] = useState('')
-  const [isUploading, setIsUploading] = useState(false)
+  const [loadingUser, setLoadingUser] =
+    useState(true)
 
-  const [docId, setDocId] = useState('')
-  const [processingMessage, setProcessingMessage] = useState('')
+  const [selectedFile, setSelectedFile] =
+    useState(null)
 
-  const [mcqExercises, setMcqExercises] = useState([])
-  const [fillExercises, setFillExercises] = useState([])
-  const [mcqAnswers, setMcqAnswers] = useState({})
-  const [mcqFeedback, setMcqFeedback] = useState({})
+  const [uploadStatus, setUploadStatus] =
+    useState('')
 
-  const [fillAnswers, setFillAnswers] = useState({})
-  const [fillFeedback, setFillFeedback] = useState({})
+  const [isUploading, setIsUploading] =
+    useState(false)
 
-  const [currentStep, setCurrentStep] = useState(1)
+  const [docId, setDocId] =
+    useState('')
+
+  const [
+    processingMessage,
+    setProcessingMessage,
+  ] = useState('')
+
+
+  // ============================================
+  // NEW HOMEWORK101 DATA
+  // ============================================
+
+  const [
+    homeworkMetadata,
+    setHomeworkMetadata,
+  ] = useState(null)
+
+  const [
+    targetLanguage,
+    setTargetLanguage,
+  ] = useState([])
+
+  const [
+    sections,
+    setSections,
+  ] = useState([])
+
+  const [
+    writingTask,
+    setWritingTask,
+  ] = useState(null)
+
+
+  // ============================================
+  // STUDENT ANSWERS
+  // ============================================
+
+  const [answers, setAnswers] =
+    useState({})
+
+  const [feedback, setFeedback] =
+    useState({})
+
+  const [
+    writingResponse,
+    setWritingResponse,
+  ] = useState('')
+
+
+  // ============================================
+  // LEGACY SUPPORT
+  // ============================================
+
+  const [
+    legacyMcq,
+    setLegacyMcq,
+  ] = useState([])
+
+  const [
+    legacyFill,
+    setLegacyFill,
+  ] = useState([])
+
+
+  const [currentStep, setCurrentStep] =
+    useState(1)
+
 
   useEffect(() => {
     async function checkUser() {
       try {
-        const currentUser = await getCurrentUser()
+        const currentUser =
+          await getCurrentUser()
+
         setUser(currentUser)
       } catch (error) {
-        console.log('User is not signed in')
+        console.log(
+          'User is not signed in'
+        )
+
         setUser(null)
       } finally {
         setLoadingUser(false)
@@ -76,13 +150,33 @@ export default function App() {
     checkUser()
   }, [])
 
+
+  function resetHomework() {
+    setHomeworkMetadata(null)
+    setTargetLanguage([])
+    setSections([])
+    setWritingTask(null)
+
+    setAnswers({})
+    setFeedback({})
+    setWritingResponse('')
+
+    setLegacyMcq([])
+    setLegacyFill([])
+  }
+
+
   async function handleLogin() {
     try {
       await signInWithRedirect()
     } catch (error) {
-      console.error('Login error:', error)
+      console.error(
+        'Login error:',
+        error
+      )
     }
   }
+
 
   async function handleLogout() {
     try {
@@ -93,45 +187,50 @@ export default function App() {
       setUploadStatus('')
       setDocId('')
       setProcessingMessage('')
-      setMcqExercises([])
-      setFillExercises([])
-      setMcqAnswers({})
-      setMcqFeedback({})
-      setFillAnswers({})
-      setFillFeedback({})
       setCurrentStep(1)
+
+      resetHomework()
     } catch (error) {
-      console.error('Logout error:', error)
+      console.error(
+        'Logout error:',
+        error
+      )
     }
   }
 
+
   function handleFileChange(event) {
-    const file = event.target.files?.[0]
+    const file =
+      event.target.files?.[0]
 
     setUploadStatus('')
     setDocId('')
     setProcessingMessage('')
-    setMcqExercises([])
-    setFillExercises([])
-    setMcqAnswers({})
-    setMcqFeedback({})
-    setFillAnswers({})
-    setFillFeedback({})
     setCurrentStep(1)
+
+    resetHomework()
 
     if (!file) {
       setSelectedFile(null)
       return
     }
 
-    if (file.type !== 'application/pdf') {
+    if (
+      file.type !==
+      'application/pdf'
+    ) {
       setSelectedFile(null)
-      setUploadStatus('Please select a PDF file.')
+
+      setUploadStatus(
+        'Please select a PDF file.'
+      )
+
       return
     }
 
     setSelectedFile(file)
   }
+
 
   function generateDocId() {
     if (crypto.randomUUID) {
@@ -147,6 +246,11 @@ export default function App() {
     )
   }
 
+
+  // ============================================
+  // ANSWER HELPERS
+  // ============================================
+
   function normalizeAnswer(value) {
     return String(value ?? '')
       .trim()
@@ -155,14 +259,25 @@ export default function App() {
       .replace(/[.,!?;:]+$/g, '')
   }
 
-  function getCorrectMcqAnswer(exercise) {
-    const answer = String(exercise?.answer ?? '').trim()
 
-    const letterMatch = answer.match(/^([A-D])[\).:-]?$/i)
+  function getCorrectMcqAnswer(
+    exercise
+  ) {
+    const answer =
+      String(
+        exercise?.answer ?? ''
+      ).trim()
+
+    const letterMatch =
+      answer.match(
+        /^([A-D])[\).:-]?$/i
+      )
 
     if (
       letterMatch &&
-      Array.isArray(exercise?.options)
+      Array.isArray(
+        exercise?.options
+      )
     ) {
       const optionIndex =
         letterMatch[1]
@@ -170,88 +285,265 @@ export default function App() {
           .charCodeAt(0) - 65
 
       return (
-        exercise.options[optionIndex] ??
-        answer
+        exercise.options[
+          optionIndex
+        ] ?? answer
       )
     }
 
     return answer
   }
 
-  function handleMcqAnswer(
-    questionIndex,
-    selectedOption,
-    exercise
+
+  function getQuestionKey(
+    sectionIndex,
+    questionIndex
   ) {
-    setMcqAnswers(prev => ({
-      ...prev,
-      [questionIndex]: selectedOption,
-    }))
-
-    const isCorrect =
-      normalizeAnswer(selectedOption) ===
-      normalizeAnswer(
-        getCorrectMcqAnswer(exercise)
-      )
-
-    setMcqFeedback(prev => ({
-      ...prev,
-      [questionIndex]: isCorrect,
-    }))
+    return (
+      sectionIndex +
+      '-' +
+      questionIndex
+    )
   }
 
-  function handleFillAnswerChange(questionIndex, value) {
-    setFillAnswers(prev => ({
+
+  function getAcceptedAnswers(
+    question
+  ) {
+    const possible = []
+
+    if (question?.answer) {
+      possible.push(
+        question.answer
+      )
+    }
+
+    if (
+      Array.isArray(
+        question?.acceptedAnswers
+      )
+    ) {
+      possible.push(
+        ...question.acceptedAnswers
+      )
+    }
+
+    return possible
+  }
+
+
+  function handleChoiceAnswer(
+    key,
+    selectedOption,
+    question
+  ) {
+    setAnswers(prev => ({
       ...prev,
-      [questionIndex]: value,
+      [key]: selectedOption,
     }))
 
-    setFillFeedback(prev => {
-      const updated = { ...prev }
-      delete updated[questionIndex]
+    if (
+      question?.evaluationMode ===
+      'exact'
+    ) {
+      const correct =
+        normalizeAnswer(
+          selectedOption
+        ) ===
+        normalizeAnswer(
+          getCorrectMcqAnswer(
+            question
+          )
+        )
+
+      setFeedback(prev => ({
+        ...prev,
+        [key]: correct,
+      }))
+    }
+  }
+
+
+  function handleTextChange(
+    key,
+    value
+  ) {
+    setAnswers(prev => ({
+      ...prev,
+      [key]: value,
+    }))
+
+    setFeedback(prev => {
+      const updated = {
+        ...prev,
+      }
+
+      delete updated[key]
+
       return updated
     })
   }
 
-  function checkFillAnswer(questionIndex, exercise) {
+
+  function checkTextAnswer(
+    key,
+    question
+  ) {
     const studentAnswer =
-      fillAnswers[questionIndex] || ''
+      answers[key] || ''
 
-    const correctAnswer =
-      exercise?.answer || ''
+    const accepted =
+      getAcceptedAnswers(
+        question
+      )
 
-    const isCorrect =
-      normalizeAnswer(studentAnswer) ===
-      normalizeAnswer(correctAnswer)
+    const correct =
+      accepted.some(
+        answer =>
+          normalizeAnswer(
+            answer
+          ) ===
+          normalizeAnswer(
+            studentAnswer
+          )
+      )
 
-    setFillFeedback(prev => ({
+    setFeedback(prev => ({
       ...prev,
-      [questionIndex]: isCorrect,
+      [key]: correct,
     }))
   }
 
-  async function fetchDocumentStatus(currentDocId) {
-    const accessToken = await getAccessToken()
 
-    const response = await fetch(
-      API_URL +
-        '/documents/' +
-        encodeURIComponent(currentDocId) +
-        '/exercises',
-      {
-        method: 'GET',
-        headers: {
-          Authorization: 'Bearer ' + accessToken,
-        },
+  function handleMatchingChange(
+    key,
+    pairIndex,
+    value
+  ) {
+    setAnswers(prev => ({
+      ...prev,
+
+      [key]: {
+        ...(prev[key] || {}),
+
+        [pairIndex]:
+          value,
+      },
+    }))
+
+    setFeedback(prev => {
+      const updated = {
+        ...prev,
       }
-    )
 
-    if (response.status === 404) {
+      delete updated[key]
+
+      return updated
+    })
+  }
+
+
+  function checkMatchingAnswer(
+    key,
+    question
+  ) {
+    const pairs =
+      Array.isArray(
+        question?.matchingPairs
+      )
+        ? question.matchingPairs
+        : []
+
+    const studentMatches =
+      answers[key] || {}
+
+    const correct =
+      pairs.length > 0 &&
+      pairs.every(
+        (pair, pairIndex) =>
+          normalizeAnswer(
+            studentMatches[
+              pairIndex
+            ]
+          ) ===
+          normalizeAnswer(
+            pair.right
+          )
+      )
+
+    setFeedback(prev => ({
+      ...prev,
+      [key]: correct,
+    }))
+  }
+
+
+  function renderFeedback(key) {
+    if (
+      feedback[key] === undefined
+    ) {
+      return null
+    }
+
+    const correct =
+      feedback[key]
+
+    return (
+      <div
+        style={{
+          marginTop: '12px',
+          fontWeight: '700',
+          color: correct
+            ? '#168447'
+            : '#d63b3b',
+        }}
+      >
+        {correct
+          ? 'Correct ✅'
+          : 'Try again ❌'}
+      </div>
+    )
+  }
+
+
+  // ============================================
+  // API
+  // ============================================
+
+  async function fetchDocumentStatus(
+    currentDocId
+  ) {
+    const accessToken =
+      await getAccessToken()
+
+    const response =
+      await fetch(
+        API_URL +
+          '/documents/' +
+          encodeURIComponent(
+            currentDocId
+          ) +
+          '/exercises',
+        {
+          method: 'GET',
+
+          headers: {
+            Authorization:
+              'Bearer ' +
+              accessToken,
+          },
+        }
+      )
+
+    if (
+      response.status === 404
+    ) {
       return null
     }
 
     if (!response.ok) {
-      const errorText = await response.text()
+      const errorText =
+        await response.text()
 
       throw new Error(
         'Status request failed: ' +
@@ -264,36 +556,85 @@ export default function App() {
     return response.json()
   }
 
-  async function pollDocumentStatus(currentDocId) {
+
+  async function pollDocumentStatus(
+    currentDocId
+  ) {
     setCurrentStep(2)
+
     setProcessingMessage(
       'Starting document processing...'
     )
 
-    for (let attempt = 0; attempt < 40; attempt++) {
+    for (
+      let attempt = 0;
+      attempt < 40;
+      attempt++
+    ) {
       const data =
-        await fetchDocumentStatus(currentDocId)
+        await fetchDocumentStatus(
+          currentDocId
+        )
 
       if (data) {
         const status =
           data.status || 'UNKNOWN'
 
         setProcessingMessage(
-          getStatusMessage(status)
+          getStatusMessage(
+            status
+          )
         )
 
-        if (status === 'EXERCISES_DONE') {
-          setMcqExercises(
+        if (
+          status ===
+          'EXERCISES_DONE'
+        ) {
+
+          // NEW STRUCTURE
+
+          setHomeworkMetadata(
+            data.metadata || null
+          )
+
+          setTargetLanguage(
+            Array.isArray(
+              data.targetLanguage
+            )
+              ? data.targetLanguage
+              : []
+          )
+
+          setSections(
+            Array.isArray(
+              data.sections
+            )
+              ? data.sections
+              : []
+          )
+
+          setWritingTask(
+            data.writingTask ||
+              null
+          )
+
+
+          // OLD STRUCTURE SUPPORT
+
+          setLegacyMcq(
             Array.isArray(data.mcq)
               ? data.mcq
               : []
           )
 
-          setFillExercises(
-            Array.isArray(data.fillInTheBlank)
+          setLegacyFill(
+            Array.isArray(
+              data.fillInTheBlank
+            )
               ? data.fillInTheBlank
               : []
           )
+
 
           setCurrentStep(3)
 
@@ -301,8 +642,12 @@ export default function App() {
         }
       }
 
-      await new Promise(resolve =>
-        setTimeout(resolve, 3000)
+      await new Promise(
+        resolve =>
+          setTimeout(
+            resolve,
+            3000
+          )
       )
     }
 
@@ -311,32 +656,40 @@ export default function App() {
     )
   }
 
+
   async function handleUpload() {
     if (!selectedFile) {
       setUploadStatus(
         'Please select a PDF first.'
       )
+
       return
     }
 
     setIsUploading(true)
-    setUploadStatus('Preparing upload...')
+
+    setUploadStatus(
+      'Preparing upload...'
+    )
+
     setProcessingMessage('')
-    setMcqExercises([])
-    setFillExercises([])
-    setMcqAnswers({})
-    setMcqFeedback({})
-    setFillAnswers({})
-    setFillFeedback({})
+
     setCurrentStep(1)
 
+    resetHomework()
+
     let currentDocId = ''
-    let uploadSucceeded = false
+
+    let uploadSucceeded =
+      false
 
     try {
-      currentDocId = generateDocId()
+      currentDocId =
+        generateDocId()
 
-      setDocId(currentDocId)
+      setDocId(
+        currentDocId
+      )
 
       const accessToken =
         await getAccessToken()
@@ -345,25 +698,33 @@ export default function App() {
         'Preparing secure upload...'
       )
 
-      const urlResponse = await fetch(
-        API_URL + '/upload-url',
-        {
-          method: 'POST',
-          headers: {
-            Authorization:
-              'Bearer ' + accessToken,
+      const urlResponse =
+        await fetch(
+          API_URL +
+            '/upload-url',
+          {
+            method: 'POST',
 
-            'Content-Type':
-              'application/json',
-          },
+            headers: {
+              Authorization:
+                'Bearer ' +
+                accessToken,
 
-          body: JSON.stringify({
-            docId: currentDocId,
-          }),
-        }
-      )
+              'Content-Type':
+                'application/json',
+            },
 
-      if (!urlResponse.ok) {
+            body:
+              JSON.stringify({
+                docId:
+                  currentDocId,
+              }),
+          }
+        )
+
+      if (
+        !urlResponse.ok
+      ) {
         const errorText =
           await urlResponse.text()
 
@@ -384,23 +745,29 @@ export default function App() {
         )
       }
 
-      setUploadStatus('Uploading PDF...')
-
-      const uploadResponse = await fetch(
-        data.uploadUrl,
-        {
-          method: 'PUT',
-
-          headers: {
-            'Content-Type':
-              'application/pdf',
-          },
-
-          body: selectedFile,
-        }
+      setUploadStatus(
+        'Uploading PDF...'
       )
 
-      if (!uploadResponse.ok) {
+      const uploadResponse =
+        await fetch(
+          data.uploadUrl,
+          {
+            method: 'PUT',
+
+            headers: {
+              'Content-Type':
+                'application/pdf',
+            },
+
+            body:
+              selectedFile,
+          }
+        )
+
+      if (
+        !uploadResponse.ok
+      ) {
         const errorText =
           await uploadResponse.text()
 
@@ -416,7 +783,9 @@ export default function App() {
         'Upload successful ✅'
       )
 
-      uploadSucceeded = true
+      uploadSucceeded =
+        true
+
     } catch (error) {
       console.error(
         'Upload error:',
@@ -427,15 +796,20 @@ export default function App() {
         'Upload failed: ' +
           error.message
       )
+
     } finally {
       setIsUploading(false)
     }
 
-    if (uploadSucceeded) {
+
+    if (
+      uploadSucceeded
+    ) {
       try {
         await pollDocumentStatus(
           currentDocId
         )
+
       } catch (error) {
         console.error(
           'Processing status error:',
@@ -449,72 +823,723 @@ export default function App() {
     }
   }
 
-  if (loadingUser) {
+
+  // ============================================
+  // QUESTION RENDERER
+  // ============================================
+
+  function renderQuestion(
+    question,
+    sectionIndex,
+    questionIndex
+  ) {
+    const key =
+      getQuestionKey(
+        sectionIndex,
+        questionIndex
+      )
+
+    const type =
+      question?.questionType ||
+      'short_answer'
+
+    const evaluationMode =
+      question?.evaluationMode ||
+      'exact'
+
+    const options =
+      Array.isArray(
+        question?.options
+      )
+        ? question.options
+        : []
+
+    const matchingPairs =
+      Array.isArray(
+        question?.matchingPairs
+      )
+        ? question.matchingPairs
+        : []
+
+
     return (
-      <div className="loading-screen">
-        <h2>Loading...</h2>
+      <div
+        className="question-card"
+        key={key}
+      >
+
+        <div className="question-number">
+          Question {questionIndex + 1}
+        </div>
+
+
+        <h4>
+          {question.question}
+        </h4>
+
+
+        {type ===
+          'multiple_choice' && (
+
+          <div className="options-list">
+
+            {options.map(
+              (
+                option,
+                optionIndex
+              ) => (
+
+                <label
+                  className="option-row"
+                  key={
+                    optionIndex
+                  }
+                >
+
+                  <input
+                    type="radio"
+                    name={
+                      'question-' +
+                      key
+                    }
+                    checked={
+                      answers[key] ===
+                      option
+                    }
+                    onChange={() =>
+                      handleChoiceAnswer(
+                        key,
+                        option,
+                        question
+                      )
+                    }
+                  />
+
+                  <span>
+                    {option}
+                  </span>
+
+                </label>
+
+              )
+            )}
+
+            {renderFeedback(
+              key
+            )}
+
+          </div>
+        )}
+
+
+        {type ===
+          'gap_fill' && (
+
+          <div className="fill-answer-area">
+
+            <input
+              type="text"
+              placeholder="Type your answer"
+              value={
+                answers[key] ||
+                ''
+              }
+              onChange={
+                event =>
+                  handleTextChange(
+                    key,
+                    event.target.value
+                  )
+              }
+              onKeyDown={
+                event => {
+                  if (
+                    event.key ===
+                      'Enter' &&
+                    answers[
+                      key
+                    ]?.trim()
+                  ) {
+                    checkTextAnswer(
+                      key,
+                      question
+                    )
+                  }
+                }
+              }
+            />
+
+
+            <button
+              type="button"
+              onClick={() =>
+                checkTextAnswer(
+                  key,
+                  question
+                )
+              }
+              disabled={
+                !answers[
+                  key
+                ]?.trim()
+              }
+              style={{
+                marginTop:
+                  '10px',
+
+                border:
+                  'none',
+
+                borderRadius:
+                  '9px',
+
+                padding:
+                  '10px 18px',
+
+                background:
+                  '#087cff',
+
+                color:
+                  '#ffffff',
+
+                fontWeight:
+                  '700',
+
+                cursor:
+                  answers[
+                    key
+                  ]?.trim()
+                    ? 'pointer'
+                    : 'not-allowed',
+
+                opacity:
+                  answers[
+                    key
+                  ]?.trim()
+                    ? 1
+                    : 0.5,
+              }}
+            >
+              Check Answer
+            </button>
+
+            {renderFeedback(
+              key
+            )}
+
+          </div>
+        )}
+
+
+        {type ===
+          'matching' && (
+
+          <div
+            style={{
+              marginTop:
+                '18px',
+            }}
+          >
+
+            {matchingPairs.map(
+              (
+                pair,
+                pairIndex
+              ) => {
+
+                const rightOptions =
+                  matchingPairs
+                    .map(
+                      item =>
+                        item.right
+                    )
+                    .sort()
+
+                return (
+                  <div
+                    key={
+                      pairIndex
+                    }
+                    style={{
+                      marginBottom:
+                        '14px',
+
+                      padding:
+                        '14px',
+
+                      border:
+                        '1px solid #e2e8f0',
+
+                      borderRadius:
+                        '10px',
+
+                      background:
+                        '#f8fafc',
+                    }}
+                  >
+
+                    <strong>
+                      {pair.left}
+                    </strong>
+
+                    <select
+                      value={
+                        answers[
+                          key
+                        ]?.[
+                          pairIndex
+                        ] || ''
+                      }
+                      onChange={
+                        event =>
+                          handleMatchingChange(
+                            key,
+                            pairIndex,
+                            event
+                              .target
+                              .value
+                          )
+                      }
+                      style={{
+                        display:
+                          'block',
+
+                        width:
+                          '100%',
+
+                        marginTop:
+                          '8px',
+
+                        padding:
+                          '10px',
+
+                        borderRadius:
+                          '8px',
+
+                        border:
+                          '1px solid #cbd5e1',
+                      }}
+                    >
+
+                      <option value="">
+                        Choose a match
+                      </option>
+
+                      {rightOptions.map(
+                        (
+                          option,
+                          optionIndex
+                        ) => (
+                          <option
+                            key={
+                              optionIndex
+                            }
+                            value={
+                              option
+                            }
+                          >
+                            {
+                              option
+                            }
+                          </option>
+                        )
+                      )}
+
+                    </select>
+
+                  </div>
+                )
+              }
+            )}
+
+
+            <button
+              type="button"
+              onClick={() =>
+                checkMatchingAnswer(
+                  key,
+                  question
+                )
+              }
+              style={{
+                border:
+                  'none',
+
+                borderRadius:
+                  '9px',
+
+                padding:
+                  '10px 18px',
+
+                background:
+                  '#087cff',
+
+                color:
+                  '#ffffff',
+
+                fontWeight:
+                  '700',
+
+                cursor:
+                  'pointer',
+              }}
+            >
+              Check Answers
+            </button>
+
+            {renderFeedback(
+              key
+            )}
+
+          </div>
+        )}
+
+
+        {(
+          type ===
+            'short_answer' ||
+          type ===
+            'open_response' ||
+          type ===
+            'paraphrase'
+        ) && (
+
+          <div
+            style={{
+              marginTop:
+                '16px',
+            }}
+          >
+
+            {evaluationMode ===
+              'exact' ? (
+
+              <>
+                <input
+                  type="text"
+                  placeholder="Type your answer"
+                  value={
+                    answers[
+                      key
+                    ] || ''
+                  }
+                  onChange={
+                    event =>
+                      handleTextChange(
+                        key,
+                        event
+                          .target
+                          .value
+                      )
+                  }
+                  style={{
+                    width:
+                      '100%',
+
+                    padding:
+                      '12px',
+
+                    borderRadius:
+                      '9px',
+
+                    border:
+                      '1px solid #cbd5e1',
+                  }}
+                />
+
+                <button
+                  type="button"
+                  onClick={() =>
+                    checkTextAnswer(
+                      key,
+                      question
+                    )
+                  }
+                  style={{
+                    marginTop:
+                      '10px',
+
+                    border:
+                      'none',
+
+                    borderRadius:
+                      '9px',
+
+                    padding:
+                      '10px 18px',
+
+                    background:
+                      '#087cff',
+
+                    color:
+                      '#ffffff',
+
+                    fontWeight:
+                      '700',
+
+                    cursor:
+                      'pointer',
+                  }}
+                >
+                  Check Answer
+                </button>
+
+                {renderFeedback(
+                  key
+                )}
+              </>
+
+            ) : (
+
+              <>
+                <textarea
+                  placeholder={
+                    evaluationMode ===
+                    'ai_review'
+                      ? 'Write your response and explain your reasoning...'
+                      : 'Write your answer...'
+                  }
+                  value={
+                    answers[
+                      key
+                    ] || ''
+                  }
+                  onChange={
+                    event =>
+                      handleTextChange(
+                        key,
+                        event
+                          .target
+                          .value
+                      )
+                  }
+                  rows="5"
+                  style={{
+                    width:
+                      '100%',
+
+                    padding:
+                      '12px',
+
+                    borderRadius:
+                      '9px',
+
+                    border:
+                      '1px solid #cbd5e1',
+
+                    resize:
+                      'vertical',
+
+                    fontFamily:
+                      'inherit',
+
+                    lineHeight:
+                      '1.5',
+                  }}
+                />
+
+                <div
+                  style={{
+                    marginTop:
+                      '8px',
+
+                    fontSize:
+                      '13px',
+
+                    color:
+                      '#64748b',
+                  }}
+                >
+
+                  {evaluationMode ===
+                  'ai_review'
+                    ? 'Open response — AI review will be added in the next stage.'
+                    : 'Meaning-based answer — automatic semantic checking will be added later.'}
+
+                </div>
+              </>
+
+            )}
+
+          </div>
+        )}
+
+
+        {Array.isArray(
+          question?.usefulVocabulary
+        ) &&
+          question
+            .usefulVocabulary
+            .length >
+            0 && (
+
+          <div
+            style={{
+              marginTop:
+                '15px',
+
+              fontSize:
+                '13px',
+
+              color:
+                '#64748b',
+            }}
+          >
+            <strong>
+              Useful language:
+            </strong>{' '}
+
+            {question
+              .usefulVocabulary
+              .join(', ')}
+          </div>
+        )}
+
       </div>
     )
   }
+
+
+  // ============================================
+  // LOADING / LOGIN
+  // ============================================
+
+  if (loadingUser) {
+    return (
+      <div className="loading-screen">
+        <h2>
+          Loading...
+        </h2>
+      </div>
+    )
+  }
+
 
   if (!user) {
     return (
       <div className="login-page">
+
         <div className="login-card">
+
           <div className="brand">
-            <div className="brand-icon">☁</div>
+
+            <div className="brand-icon">
+              ☁
+            </div>
 
             <div>
-              <strong>AWS</strong>
-              <span>SOLUTIONS</span>
+              <strong>
+                AWS
+              </strong>
+
+              <span>
+                SOLUTIONS
+              </span>
             </div>
+
           </div>
 
-          <h1>Vocabulary Builder</h1>
+
+          <h1>
+            Vocabulary Builder
+          </h1>
+
 
           <p>
-            Turn your lessons into personalized
-            exercises using AI.
+            Turn your lessons into
+            personalized exercises
+            using AI.
           </p>
 
-          <button onClick={handleLogin}>
+
+          <button
+            onClick={
+              handleLogin
+            }
+          >
             Sign In to Continue
           </button>
+
         </div>
+
       </div>
     )
   }
 
+
+  const hasNewHomework =
+    sections.length > 0
+
+
+  const hasLegacyExercises =
+    legacyMcq.length > 0 ||
+    legacyFill.length > 0
+
+
   const hasExercises =
-    mcqExercises.length > 0 ||
-    fillExercises.length > 0
+    hasNewHomework ||
+    hasLegacyExercises
+
 
   const displayName =
-    user.signInDetails?.loginId ||
+    user.signInDetails
+      ?.loginId ||
     'Student'
+
+
+  const writingWordCount =
+    writingResponse
+      .trim()
+      ? writingResponse
+          .trim()
+          .split(/\s+/)
+          .length
+      : 0
+
 
   return (
     <div className="app-shell">
 
       <header className="topbar">
+
         <div className="topbar-inner">
 
           <div className="brand">
+
             <div className="brand-icon">
               ☁
             </div>
 
             <div className="brand-text">
-              <strong>AWS</strong>
-              <span>SOLUTIONS</span>
+              <strong>
+                AWS
+              </strong>
+
+              <span>
+                SOLUTIONS
+              </span>
             </div>
+
           </div>
 
+
           <nav className="main-nav">
-            <a href="/">Home</a>
-            <a href="/#about">About</a>
-            <a href="/#skills">Skills</a>
-            <a href="/#projects">Projects</a>
+
+            <a href="/">
+              Home
+            </a>
+
+            <a href="/#about">
+              About
+            </a>
+
+            <a href="/#skills">
+              Skills
+            </a>
+
+            <a href="/#projects">
+              Projects
+            </a>
 
             <a
               href="#builder"
@@ -526,9 +1551,12 @@ export default function App() {
             <a href="/#contact">
               Contact
             </a>
+
           </nav>
 
+
           <div className="user-menu">
+
             <div className="user-avatar">
               👤
             </div>
@@ -539,19 +1567,25 @@ export default function App() {
 
             <button
               className="signout-button"
-              onClick={handleLogout}
+              onClick={
+                handleLogout
+              }
             >
               Sign Out
             </button>
+
           </div>
 
         </div>
+
       </header>
+
 
       <section
         className="builder-hero"
         id="builder"
       >
+
         <div className="hero-inner">
 
           <div className="hero-copy">
@@ -568,14 +1602,16 @@ export default function App() {
 
             <h2>
               Turn your lessons into
-              personalized exercises using AI.
+              personalized homework using AI.
             </h2>
 
             <p>
-              Upload a PDF and get vocabulary,
-              comprehension and language
-              practice in seconds.
+              Upload a PDF and get
+              vocabulary, comprehension,
+              practical language and
+              writing practice.
             </p>
+
 
             <div className="hero-features">
 
@@ -592,7 +1628,9 @@ export default function App() {
               </span>
 
             </div>
+
           </div>
+
 
           <div className="hero-visual">
 
@@ -609,15 +1647,29 @@ export default function App() {
             </div>
 
             <div className="visual-output">
-              <span>Vocabulary</span>
-              <span>Comprehension</span>
-              <span>Grammar</span>
-              <span>Writing</span>
+              <span>
+                Vocabulary
+              </span>
+
+              <span>
+                Comprehension
+              </span>
+
+              <span>
+                Situations
+              </span>
+
+              <span>
+                Writing
+              </span>
             </div>
 
           </div>
+
         </div>
+
       </section>
+
 
       <div className="page-content">
 
@@ -630,21 +1682,29 @@ export default function App() {
                 : 'step'
             }
           >
+
             <div className="step-number">
               1
             </div>
 
             <div>
-              <strong>Upload PDF</strong>
+              <strong>
+                Upload PDF
+              </strong>
+
               <span>
-                Choose your lesson document
+                Choose your lesson
+                document
               </span>
             </div>
+
           </div>
+
 
           <div className="step-arrow">
             →
           </div>
+
 
           <div
             className={
@@ -653,21 +1713,29 @@ export default function App() {
                 : 'step'
             }
           >
+
             <div className="step-number">
               2
             </div>
 
             <div>
-              <strong>Processing</strong>
+              <strong>
+                Processing
+              </strong>
+
               <span>
-                AI is analyzing your content
+                AI is analysing
+                your content
               </span>
             </div>
+
           </div>
+
 
           <div className="step-arrow">
             →
           </div>
+
 
           <div
             className={
@@ -676,26 +1744,30 @@ export default function App() {
                 : 'step'
             }
           >
+
             <div className="step-number">
               3
             </div>
 
             <div>
               <strong>
-                Exercises Ready
+                Homework Ready
               </strong>
 
               <span>
-                Start practicing
+                Start practising
               </span>
             </div>
+
           </div>
 
         </section>
 
+
         <div className="dashboard-grid">
 
           <div className="dashboard-main">
+
 
             <section
               className="dashboard-card upload-card"
@@ -703,11 +1775,13 @@ export default function App() {
             >
 
               <div className="card-heading">
+
                 <div className="card-icon">
                   ⇧
                 </div>
 
                 <div>
+
                   <h2>
                     Upload Your Lesson
                   </h2>
@@ -715,8 +1789,11 @@ export default function App() {
                   <p>
                     PDF documents only
                   </p>
+
                 </div>
+
               </div>
+
 
               <div className="upload-zone">
 
@@ -729,9 +1806,11 @@ export default function App() {
                 </h3>
 
                 <p>
-                  Upload a lesson, article,
-                  worksheet or reading material.
+                  Upload a lesson,
+                  article, worksheet
+                  or reading material.
                 </p>
+
 
                 <input
                   type="file"
@@ -741,18 +1820,29 @@ export default function App() {
                   }
                 />
 
+
                 {selectedFile && (
+
                   <div className="selected-file">
+
                     Selected:
+
                     <strong>
                       {' '}
-                      {selectedFile.name}
+                      {
+                        selectedFile.name
+                      }
                     </strong>
+
                   </div>
+
                 )}
 
+
                 <button
-                  onClick={handleUpload}
+                  onClick={
+                    handleUpload
+                  }
                   disabled={
                     !selectedFile ||
                     isUploading
@@ -763,14 +1853,19 @@ export default function App() {
                     : 'Upload PDF'}
                 </button>
 
+
                 {uploadStatus && (
+
                   <div className="status-text">
                     {uploadStatus}
                   </div>
+
                 )}
 
               </div>
+
             </section>
+
 
             <section className="dashboard-card processing-card">
 
@@ -781,28 +1876,40 @@ export default function App() {
                 </div>
 
                 <div>
+
                   <h2>
                     Processing Your Document
                   </h2>
 
                   <p>
                     Extracting text and
-                    generating exercises.
+                    generating homework.
                   </p>
+
                 </div>
+
               </div>
+
 
               <div className="processing-area">
 
                 {processingMessage ? (
+
                   <strong>
-                    {processingMessage}
+                    {
+                      processingMessage
+                    }
                   </strong>
+
                 ) : (
+
                   <span>
-                    No active processing job.
+                    No active processing
+                    job.
                   </span>
+
                 )}
+
 
                 <div className="progress-track">
 
@@ -821,7 +1928,9 @@ export default function App() {
                 </div>
 
               </div>
+
             </section>
+
 
             <section className="dashboard-card exercises-card">
 
@@ -832,124 +1941,751 @@ export default function App() {
                 </div>
 
                 <div>
+
                   <h2>
-                    Practice Exercises
+                    Homework Practice
                   </h2>
 
                   <p>
-                    Practice the material
+                    Practice the language,
+                    ideas and situations
                     generated from your lesson.
                   </p>
+
                 </div>
 
               </div>
 
+
               {!hasExercises && (
+
                 <div className="empty-exercises">
-                  Your generated exercises
+
+                  Your generated homework
                   will appear here.
+
                 </div>
+
               )}
 
-              {mcqExercises.length > 0 && (
+
+              {hasNewHomework && (
+                <>
+
+                  {homeworkMetadata && (
+
+                    <div
+                      style={{
+                        marginBottom:
+                          '28px',
+
+                        padding:
+                          '20px',
+
+                        borderRadius:
+                          '14px',
+
+                        background:
+                          '#f8fafc',
+
+                        border:
+                          '1px solid #e2e8f0',
+                      }}
+                    >
+
+                      <h2
+                        style={{
+                          marginTop: 0,
+                        }}
+                      >
+                        {
+                          homeworkMetadata.title
+                        }
+                      </h2>
+
+
+                      <div
+                        style={{
+                          display:
+                            'flex',
+
+                          gap:
+                            '10px',
+
+                          flexWrap:
+                            'wrap',
+
+                          marginBottom:
+                            '15px',
+                        }}
+                      >
+
+                        {homeworkMetadata.level && (
+
+                          <span className="exercise-badge">
+                            Level:{' '}
+                            {
+                              homeworkMetadata.level
+                            }
+                          </span>
+
+                        )}
+
+
+                        {homeworkMetadata.estimatedTime && (
+
+                          <span className="exercise-badge">
+                            ⏱{' '}
+                            {
+                              homeworkMetadata.estimatedTime
+                            }
+                          </span>
+
+                        )}
+
+                      </div>
+
+
+                      {homeworkMetadata.topic && (
+
+                        <p>
+                          <strong>
+                            Topic:
+                          </strong>{' '}
+                          {
+                            homeworkMetadata.topic
+                          }
+                        </p>
+
+                      )}
+
+
+                      {Array.isArray(
+                        homeworkMetadata.homeworkGoals
+                      ) &&
+                        homeworkMetadata
+                          .homeworkGoals
+                          .length >
+                          0 && (
+
+                        <div>
+
+                          <strong>
+                            Homework goals
+                          </strong>
+
+                          <ul>
+                            {
+                              homeworkMetadata
+                                .homeworkGoals
+                                .map(
+                                  (
+                                    goal,
+                                    index
+                                  ) => (
+                                    <li
+                                      key={
+                                        index
+                                      }
+                                    >
+                                      {
+                                        goal
+                                      }
+                                    </li>
+                                  )
+                                )
+                            }
+                          </ul>
+
+                        </div>
+
+                      )}
+
+                    </div>
+
+                  )}
+
+
+                  {targetLanguage.length >
+                    0 && (
+
+                    <div
+                      style={{
+                        marginBottom:
+                          '30px',
+                      }}
+                    >
+
+                      <h3>
+                        Target Language
+                      </h3>
+
+                      <div
+                        style={{
+                          display:
+                            'flex',
+
+                          flexWrap:
+                            'wrap',
+
+                          gap:
+                            '8px',
+                        }}
+                      >
+
+                        {targetLanguage.map(
+                          (
+                            item,
+                            index
+                          ) => (
+
+                            <span
+                              key={
+                                index
+                              }
+                              style={{
+                                padding:
+                                  '8px 12px',
+
+                                borderRadius:
+                                  '20px',
+
+                                background:
+                                  '#eaf3ff',
+
+                                color:
+                                  '#075db8',
+
+                                fontWeight:
+                                  '600',
+
+                                fontSize:
+                                  '14px',
+                              }}
+                            >
+                              {
+                                item.item
+                              }
+                            </span>
+
+                          )
+                        )}
+
+                      </div>
+
+                    </div>
+
+                  )}
+
+
+                  {sections.map(
+                    (
+                      section,
+                      sectionIndex
+                    ) => (
+
+                      <div
+                        className="exercise-section"
+                        key={
+                          section.id ??
+                          sectionIndex
+                        }
+                      >
+
+                        <div className="exercise-title-row">
+
+                          <h3>
+                            {
+                              section.title
+                            }
+                          </h3>
+
+                          <span className="exercise-badge">
+                            {
+                              Array.isArray(
+                                section.questions
+                              )
+                                ? section
+                                    .questions
+                                    .length
+                                : 0
+                            }
+                            {' '}
+                            Questions
+                          </span>
+
+                        </div>
+
+
+                        {section.instructions && (
+
+                          <p
+                            style={{
+                              marginBottom:
+                                '18px',
+
+                              color:
+                                '#475569',
+
+                              lineHeight:
+                                '1.6',
+                            }}
+                          >
+                            {
+                              section.instructions
+                            }
+                          </p>
+
+                        )}
+
+
+                        {Array.isArray(
+                          section.wordBank
+                        ) &&
+                          section
+                            .wordBank
+                            .length >
+                            0 && (
+
+                          <div
+                            style={{
+                              marginBottom:
+                                '20px',
+
+                              padding:
+                                '14px',
+
+                              background:
+                                '#f8fafc',
+
+                              borderRadius:
+                                '10px',
+                            }}
+                          >
+
+                            <strong>
+                              Word Bank:
+                            </strong>{' '}
+
+                            {
+                              section
+                                .wordBank
+                                .join(
+                                  ' • '
+                                )
+                            }
+
+                          </div>
+
+                        )}
+
+
+                        {Array.isArray(
+                          section.questions
+                        ) &&
+                          section.questions.map(
+                            (
+                              question,
+                              questionIndex
+                            ) =>
+                              renderQuestion(
+                                question,
+                                sectionIndex,
+                                questionIndex
+                              )
+                          )}
+
+                      </div>
+
+                    )
+                  )}
+
+
+                  {writingTask
+                    ?.enabled ===
+                    true && (
+
+                    <div className="exercise-section">
+
+                      <div className="exercise-title-row">
+
+                        <h3>
+                          ✍️{' '}
+                          {
+                            writingTask.title ||
+                            'Writing Task'
+                          }
+                        </h3>
+
+                        {writingTask.suggestedWordCount && (
+
+                          <span className="exercise-badge">
+                            {
+                              writingTask.suggestedWordCount
+                            }
+                          </span>
+
+                        )}
+
+                      </div>
+
+
+                      <p
+                        style={{
+                          lineHeight:
+                            '1.7',
+                        }}
+                      >
+                        {
+                          writingTask.instructions
+                        }
+                      </p>
+
+
+                      {Array.isArray(
+                        writingTask.requiredPoints
+                      ) &&
+                        writingTask
+                          .requiredPoints
+                          .length >
+                          0 && (
+
+                        <div
+                          style={{
+                            marginTop:
+                              '18px',
+                          }}
+                        >
+
+                          <strong>
+                            Include:
+                          </strong>
+
+                          <ul>
+
+                            {
+                              writingTask
+                                .requiredPoints
+                                .map(
+                                  (
+                                    point,
+                                    index
+                                  ) => (
+
+                                    <li
+                                      key={
+                                        index
+                                      }
+                                    >
+                                      {
+                                        point
+                                      }
+                                    </li>
+
+                                  )
+                                )
+                            }
+
+                          </ul>
+
+                        </div>
+
+                      )}
+
+
+                      {Array.isArray(
+                        writingTask.targetVocabulary
+                      ) &&
+                        writingTask
+                          .targetVocabulary
+                          .length >
+                          0 && (
+
+                        <div
+                          style={{
+                            marginTop:
+                              '15px',
+
+                            marginBottom:
+                              '15px',
+                          }}
+                        >
+
+                          <strong>
+                            Target vocabulary:
+                          </strong>{' '}
+
+                          {
+                            writingTask
+                              .targetVocabulary
+                              .join(
+                                ', '
+                              )
+                          }
+
+                        </div>
+
+                      )}
+
+
+                      <textarea
+                        value={
+                          writingResponse
+                        }
+                        onChange={
+                          event =>
+                            setWritingResponse(
+                              event
+                                .target
+                                .value
+                            )
+                        }
+                        placeholder="Write your response here..."
+                        rows="12"
+                        style={{
+                          width:
+                            '100%',
+
+                          padding:
+                            '14px',
+
+                          borderRadius:
+                            '10px',
+
+                          border:
+                            '1px solid #cbd5e1',
+
+                          resize:
+                            'vertical',
+
+                          fontFamily:
+                            'inherit',
+
+                          fontSize:
+                            '15px',
+
+                          lineHeight:
+                            '1.6',
+                        }}
+                      />
+
+
+                      <div
+                        style={{
+                          marginTop:
+                            '8px',
+
+                          color:
+                            '#64748b',
+
+                          fontSize:
+                            '13px',
+                        }}
+                      >
+                        Word count:{' '}
+                        {
+                          writingWordCount
+                        }
+                      </div>
+
+
+                      {Array.isArray(
+                        writingTask.evaluationCriteria
+                      ) &&
+                        writingTask
+                          .evaluationCriteria
+                          .length >
+                          0 && (
+
+                        <div
+                          style={{
+                            marginTop:
+                              '18px',
+
+                            padding:
+                              '15px',
+
+                            background:
+                              '#f8fafc',
+
+                            borderRadius:
+                              '10px',
+                          }}
+                        >
+
+                          <strong>
+                            Evaluation criteria
+                          </strong>
+
+                          <ul>
+
+                            {
+                              writingTask
+                                .evaluationCriteria
+                                .map(
+                                  (
+                                    criterion,
+                                    index
+                                  ) => (
+
+                                    <li
+                                      key={
+                                        index
+                                      }
+                                    >
+                                      {
+                                        criterion
+                                      }
+                                    </li>
+
+                                  )
+                                )
+                            }
+
+                          </ul>
+
+                        </div>
+
+                      )}
+
+                    </div>
+
+                  )}
+
+                </>
+              )}
+
+
+              {!hasNewHomework &&
+                legacyMcq.length >
+                  0 && (
+
                 <div className="exercise-section">
 
                   <div className="exercise-title-row">
+
                     <h3>
                       Multiple Choice
                     </h3>
 
                     <span className="exercise-badge">
-                      {mcqExercises.length}
-                      {' '}
+                      {
+                        legacyMcq.length
+                      }{' '}
                       Questions
                     </span>
+
                   </div>
 
-                  {mcqExercises.map(
-                    (exercise, index) => (
-                      <div
-                        className="question-card"
-                        key={
-                          'mcq-' + index
-                        }
-                      >
 
-                        <div className="question-number">
-                          Question {index + 1}
-                        </div>
+                  {legacyMcq.map(
+                    (
+                      exercise,
+                      index
+                    ) => {
 
-                        <h4>
-                          {exercise.question}
-                        </h4>
+                      const key =
+                        'legacy-mcq-' +
+                        index
 
-                        <div className="options-list">
+                      return (
 
-                          {Array.isArray(
-                            exercise.options
-                          ) &&
-                            exercise.options.map(
-                              (
-                                option,
-                                optionIndex
-                              ) => (
-                                <label
-                                  className="option-row"
-                                  key={
-                                    optionIndex
-                                  }
-                                >
-                                  <input
-                                    type="radio"
-                                    name={
-                                      'mcq-' +
-                                      index
-                                    }
-                                    checked={
-                                      mcqAnswers[index] ===
-                                      option
-                                    }
-                                    onChange={() =>
-                                      handleMcqAnswer(
-                                        index,
-                                        option,
-                                        exercise
-                                      )
-                                    }
-                                  />
+                        <div
+                          className="question-card"
+                          key={
+                            key
+                          }
+                        >
 
-                                  <span>
-                                    {option}
-                                  </span>
-                                </label>
-                              )
-                            )}
-
-                        </div>
-
-                        {mcqFeedback[index] !== undefined && (
-                          <div
-                            style={{
-                              marginTop: '12px',
-                              fontWeight: '700',
-                              color: mcqFeedback[index]
-                                ? '#168447'
-                                : '#d63b3b',
-                            }}
-                          >
-                            {mcqFeedback[index]
-                              ? 'Correct ✅'
-                              : 'Try again ❌'}
+                          <div className="question-number">
+                            Question{' '}
+                            {
+                              index +
+                              1
+                            }
                           </div>
-                        )}
-                      </div>
-                    )
+
+                          <h4>
+                            {
+                              exercise.question
+                            }
+                          </h4>
+
+
+                          <div className="options-list">
+
+                            {Array.isArray(
+                              exercise.options
+                            ) &&
+                              exercise.options.map(
+                                (
+                                  option,
+                                  optionIndex
+                                ) => (
+
+                                  <label
+                                    className="option-row"
+                                    key={
+                                      optionIndex
+                                    }
+                                  >
+
+                                    <input
+                                      type="radio"
+                                      name={
+                                        key
+                                      }
+                                      checked={
+                                        answers[
+                                          key
+                                        ] ===
+                                        option
+                                      }
+                                      onChange={() =>
+                                        handleChoiceAnswer(
+                                          key,
+                                          option,
+                                          {
+                                            ...exercise,
+                                            evaluationMode:
+                                              'exact',
+                                          }
+                                        )
+                                      }
+                                    />
+
+                                    <span>
+                                      {
+                                        option
+                                      }
+                                    </span>
+
+                                  </label>
+
+                                )
+                              )}
+
+                          </div>
+
+                          {renderFeedback(
+                            key
+                          )}
+
+                        </div>
+
+                      )
+                    }
                   )}
 
                 </div>
+
               )}
 
-              {fillExercises.length > 0 && (
+
+              {!hasNewHomework &&
+                legacyFill.length >
+                  0 && (
+
                 <div className="exercise-section">
 
                   <div className="exercise-title-row">
@@ -959,115 +2695,137 @@ export default function App() {
                     </h3>
 
                     <span className="exercise-badge">
-                      {fillExercises.length}
-                      {' '}
+                      {
+                        legacyFill.length
+                      }{' '}
                       Questions
                     </span>
 
                   </div>
 
-                  {fillExercises.map(
-                    (exercise, index) => (
-                      <div
-                        className="question-card"
-                        key={
-                          'fill-' + index
-                        }
-                      >
 
-                        <div className="question-number">
-                          Question {index + 1}
-                        </div>
+                  {legacyFill.map(
+                    (
+                      exercise,
+                      index
+                    ) => {
 
-                        <h4>
-                          {exercise.question}
-                        </h4>
+                      const key =
+                        'legacy-fill-' +
+                        index
 
-                        <div className="fill-answer-area">
-                          <input
-                            type="text"
-                            placeholder="Type your answer"
-                            value={
-                              fillAnswers[index] || ''
+                      return (
+
+                        <div
+                          className="question-card"
+                          key={
+                            key
+                          }
+                        >
+
+                          <div className="question-number">
+                            Question{' '}
+                            {
+                              index +
+                              1
                             }
-                            onChange={event =>
-                              handleFillAnswerChange(
-                                index,
-                                event.target.value
-                              )
+                          </div>
+
+                          <h4>
+                            {
+                              exercise.question
                             }
-                            onKeyDown={event => {
-                              if (
-                                event.key === 'Enter' &&
-                                fillAnswers[index]?.trim()
-                              ) {
-                                checkFillAnswer(
-                                  index,
-                                  exercise
+                          </h4>
+
+
+                          <div className="fill-answer-area">
+
+                            <input
+                              type="text"
+                              placeholder="Type your answer"
+                              value={
+                                answers[
+                                  key
+                                ] ||
+                                ''
+                              }
+                              onChange={
+                                event =>
+                                  handleTextChange(
+                                    key,
+                                    event
+                                      .target
+                                      .value
+                                  )
+                              }
+                            />
+
+
+                            <button
+                              type="button"
+                              onClick={() =>
+                                checkTextAnswer(
+                                  key,
+                                  {
+                                    ...exercise,
+
+                                    acceptedAnswers:
+                                      [],
+
+                                    evaluationMode:
+                                      'exact',
+                                  }
                                 )
                               }
-                            }}
-                          />
-
-                          <button
-                            type="button"
-                            onClick={() =>
-                              checkFillAnswer(
-                                index,
-                                exercise
-                              )
-                            }
-                            disabled={
-                              !fillAnswers[index]?.trim()
-                            }
-                            style={{
-                              marginTop: '10px',
-                              border: 'none',
-                              borderRadius: '9px',
-                              padding: '10px 18px',
-                              background: '#087cff',
-                              color: '#ffffff',
-                              fontWeight: '700',
-                              cursor:
-                                fillAnswers[index]?.trim()
-                                  ? 'pointer'
-                                  : 'not-allowed',
-                              opacity:
-                                fillAnswers[index]?.trim()
-                                  ? 1
-                                  : 0.5,
-                            }}
-                          >
-                            Check Answer
-                          </button>
-
-                          {fillFeedback[index] !== undefined && (
-                            <div
                               style={{
-                                marginTop: '12px',
-                                fontWeight: '700',
-                                color: fillFeedback[index]
-                                  ? '#168447'
-                                  : '#d63b3b',
+                                marginTop:
+                                  '10px',
+
+                                border:
+                                  'none',
+
+                                borderRadius:
+                                  '9px',
+
+                                padding:
+                                  '10px 18px',
+
+                                background:
+                                  '#087cff',
+
+                                color:
+                                  '#ffffff',
+
+                                fontWeight:
+                                  '700',
+
+                                cursor:
+                                  'pointer',
                               }}
                             >
-                              {fillFeedback[index]
-                                ? 'Correct ✅'
-                                : 'Try again ❌'}
-                            </div>
-                          )}
+                              Check Answer
+                            </button>
+
+                            {renderFeedback(
+                              key
+                            )}
+
+                          </div>
+
                         </div>
 
-                      </div>
-                    )
+                      )
+                    }
                   )}
 
                 </div>
+
               )}
 
             </section>
 
           </div>
+
 
           <aside className="dashboard-sidebar">
 
@@ -1078,21 +2836,28 @@ export default function App() {
               </h3>
 
               <div className="mini-step">
-                <span>1</span>
+                <span>
+                  1
+                </span>
                 Upload your PDF
               </div>
 
               <div className="mini-step">
-                <span>2</span>
-                AI processes the lesson
+                <span>
+                  2
+                </span>
+                AI analyses the lesson
               </div>
 
               <div className="mini-step">
-                <span>3</span>
-                Practice your exercises
+                <span>
+                  3
+                </span>
+                Complete your homework
               </div>
 
             </section>
+
 
             <section className="side-card">
 
@@ -1101,25 +2866,28 @@ export default function App() {
               </h3>
 
               <p>
-                ✓ Use clear, text-based PDFs.
+                ✓ Use clear,
+                text-based PDFs.
               </p>
 
               <p>
-                ✓ Lessons with real articles
-                work best.
+                ✓ Lessons with useful
+                target language work best.
               </p>
 
               <p>
-                ✓ Longer lessons can create
-                more varied practice.
+                ✓ Longer lessons can
+                create more varied
+                practice.
               </p>
 
               <p>
-                ✓ Try different topics to
-                expand your vocabulary.
+                ✓ Complete the sections
+                in order for best results.
               </p>
 
             </section>
+
 
             <section className="side-card quote-card">
 
@@ -1128,8 +2896,9 @@ export default function App() {
               </div>
 
               <p>
-                A new language is a new way
-                of seeing the world.
+                A new language is a
+                new way of seeing the
+                world.
               </p>
 
             </section>
@@ -1137,7 +2906,9 @@ export default function App() {
           </aside>
 
         </div>
+
       </div>
+
 
       <footer className="site-footer">
 
@@ -1146,22 +2917,31 @@ export default function App() {
           <div className="footer-brand">
 
             <div className="brand">
+
               <div className="brand-icon">
                 ☁
               </div>
 
               <div className="brand-text">
-                <strong>AWS</strong>
-                <span>SOLUTIONS</span>
+                <strong>
+                  AWS
+                </strong>
+
+                <span>
+                  SOLUTIONS
+                </span>
               </div>
+
             </div>
 
             <p>
-              Building secure, scalable
-              solutions for a better tomorrow.
+              Building secure,
+              scalable solutions
+              for a better tomorrow.
             </p>
 
           </div>
+
 
           <div className="footer-links">
 
@@ -1187,6 +2967,7 @@ export default function App() {
 
           </div>
 
+
           <div className="footer-contact">
 
             <h4>
@@ -1201,9 +2982,12 @@ export default function App() {
 
         </div>
 
+
         <div className="footer-bottom">
+
           © 2026 AWS Solutions.
           All rights reserved.
+
         </div>
 
       </footer>
