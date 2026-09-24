@@ -111,6 +111,26 @@ export default function App() {
 
 
   // ============================================
+  // HOMEWORK EVALUATION
+  // ============================================
+
+  const [
+    isSubmittingHomework,
+    setIsSubmittingHomework,
+  ] = useState(false)
+
+  const [
+    evaluationStatus,
+    setEvaluationStatus,
+  ] = useState('')
+
+  const [
+    evaluationResult,
+    setEvaluationResult,
+  ] = useState(null)
+
+
+  // ============================================
   // LEGACY SUPPORT
   // ============================================
 
@@ -160,6 +180,10 @@ export default function App() {
     setAnswers({})
     setFeedback({})
     setWritingResponse('')
+
+    setIsSubmittingHomework(false)
+    setEvaluationStatus('')
+    setEvaluationResult(null)
 
     setLegacyMcq([])
     setLegacyFill([])
@@ -824,6 +848,211 @@ export default function App() {
   }
 
 
+
+  // ============================================
+  // SUBMIT COMPLETE HOMEWORK FOR EVALUATION
+  // ============================================
+
+  function buildSubmissionAnswers() {
+    const submitted = []
+
+    sections.forEach(
+      (section, sectionIndex) => {
+        const sectionId =
+          section?.id ??
+          sectionIndex + 1
+
+        const questions =
+          Array.isArray(
+            section?.questions
+          )
+            ? section.questions
+            : []
+
+        questions.forEach(
+          (question, questionIndex) => {
+            const key =
+              getQuestionKey(
+                sectionIndex,
+                questionIndex
+              )
+
+            submitted.push({
+              sectionId,
+
+              questionId:
+                question?.id ??
+                questionIndex + 1,
+
+              answer:
+                answers[key] ??
+                '',
+            })
+          }
+        )
+      }
+    )
+
+    return submitted
+  }
+
+
+  async function handleSubmitHomework() {
+    if (!docId) {
+      setEvaluationStatus(
+        'Cannot submit: document ID is missing.'
+      )
+
+      return
+    }
+
+    if (!sections.length) {
+      setEvaluationStatus(
+        'There is no homework to submit.'
+      )
+
+      return
+    }
+
+    setIsSubmittingHomework(true)
+    setEvaluationStatus(
+      'Submitting homework for evaluation...'
+    )
+    setEvaluationResult(null)
+
+    try {
+      const accessToken =
+        await getAccessToken()
+
+      const response =
+        await fetch(
+          API_URL +
+            '/documents/' +
+            encodeURIComponent(
+              docId
+            ) +
+            '/evaluate',
+          {
+            method: 'POST',
+
+            headers: {
+              Authorization:
+                'Bearer ' +
+                accessToken,
+
+              'Content-Type':
+                'application/json',
+            },
+
+            body:
+              JSON.stringify({
+                answers:
+                  buildSubmissionAnswers(),
+
+                writingAnswer:
+                  writingResponse,
+              }),
+          }
+        )
+
+      const responseText =
+        await response.text()
+
+      let data = null
+
+      try {
+        data = responseText
+          ? JSON.parse(
+              responseText
+            )
+          : {}
+      } catch {
+        data = null
+      }
+
+      if (!response.ok) {
+        throw new Error(
+          data?.message ||
+            responseText ||
+            'Evaluation request failed'
+        )
+      }
+
+      if (!data) {
+        throw new Error(
+          'Evaluation API returned invalid JSON'
+        )
+      }
+
+      setEvaluationResult(data)
+
+      setEvaluationStatus(
+        'Homework evaluated ✅'
+      )
+
+      window.setTimeout(
+        () => {
+          document
+            .getElementById(
+              'evaluation-report'
+            )
+            ?.scrollIntoView({
+              behavior: 'smooth',
+              block: 'start',
+            })
+        },
+        100
+      )
+
+    } catch (error) {
+      console.error(
+        'Homework evaluation error:',
+        error
+      )
+
+      setEvaluationStatus(
+        'Evaluation failed: ' +
+          error.message
+      )
+
+    } finally {
+      setIsSubmittingHomework(false)
+    }
+  }
+
+
+  function findQuestionForResult(
+    result
+  ) {
+    const section =
+      sections.find(
+        item =>
+          String(item?.id) ===
+          String(
+            result?.sectionId
+          )
+      )
+
+    const question =
+      Array.isArray(
+        section?.questions
+      )
+        ? section.questions.find(
+            item =>
+              String(item?.id) ===
+              String(
+                result?.questionId
+              )
+          )
+        : null
+
+    return {
+      section,
+      question,
+    }
+  }
+
+
   // ============================================
   // QUESTION RENDERER
   // ============================================
@@ -1353,8 +1582,8 @@ export default function App() {
 
                   {evaluationMode ===
                   'ai_review'
-                    ? 'Open response — AI review will be added in the next stage.'
-                    : 'Meaning-based answer — automatic semantic checking will be added later.'}
+                    ? 'Open response — AI will review this when you submit the homework.'
+                    : 'Meaning-based answer — AI will check this when you submit the homework.'}
 
                 </div>
               </>
@@ -1495,6 +1724,122 @@ export default function App() {
           .split(/\s+/)
           .length
       : 0
+
+
+  const evaluationQuestionResults =
+    Array.isArray(
+      evaluationResult
+        ?.questionResults
+    )
+      ? evaluationResult
+          .questionResults
+      : []
+
+
+  const sectionScoreRows =
+    sections
+      .map(
+        (section, sectionIndex) => {
+          const sectionId =
+            section?.id ??
+            sectionIndex + 1
+
+          const results =
+            evaluationQuestionResults
+              .filter(
+                result =>
+                  String(
+                    result?.sectionId
+                  ) ===
+                  String(
+                    sectionId
+                  )
+              )
+
+          const earned =
+            results.reduce(
+              (total, result) =>
+                total +
+                Number(
+                  result?.score ||
+                  0
+                ),
+              0
+            )
+
+          const maximum =
+            results.reduce(
+              (total, result) =>
+                total +
+                Number(
+                  result?.maxScore ||
+                  0
+                ),
+              0
+            )
+
+          return {
+            sectionId,
+
+            title:
+              section?.title ||
+              'Section ' +
+                (sectionIndex + 1),
+
+            score:
+              maximum > 0
+                ? Math.round(
+                    (
+                      earned /
+                      maximum
+                    ) *
+                      100
+                  )
+                : 0,
+
+            count:
+              results.length,
+          }
+        }
+      )
+      .filter(
+        item =>
+          item.count > 0
+      )
+
+
+  const sortedEvaluationResults =
+    [...evaluationQuestionResults]
+      .sort(
+        (a, b) => {
+          const sectionDifference =
+            Number(
+              a?.sectionId ||
+              0
+            ) -
+            Number(
+              b?.sectionId ||
+              0
+            )
+
+          if (
+            sectionDifference !== 0
+          ) {
+            return sectionDifference
+          }
+
+          return (
+            Number(
+              a?.questionId ||
+              0
+            ) -
+            Number(
+              b?.questionId ||
+              0
+            )
+          )
+        }
+      )
 
 
   return (
@@ -2548,6 +2893,615 @@ export default function App() {
 
                       )}
 
+                    </div>
+
+                  )}
+
+
+                  <div
+                    className="exercise-section"
+                    style={{
+                      marginTop: '30px',
+                      padding: '24px',
+                      border: '1px solid #dbeafe',
+                      borderRadius: '14px',
+                      background: '#f8fbff',
+                    }}
+                  >
+                    <div className="exercise-title-row">
+                      <h3>
+                        ✅ Submit Homework
+                      </h3>
+
+                      <span className="exercise-badge">
+                        Full evaluation
+                      </span>
+                    </div>
+
+                    <p
+                      style={{
+                        color: '#475569',
+                        lineHeight: '1.6',
+                      }}
+                    >
+                      Submit all of your answers together.
+                      Exact answers are checked by the
+                      application, while meaning-based,
+                      open-response and writing tasks are
+                      reviewed by AI.
+                    </p>
+
+                    <button
+                      type="button"
+                      onClick={
+                        handleSubmitHomework
+                      }
+                      disabled={
+                        isSubmittingHomework
+                      }
+                      style={{
+                        border: 'none',
+                        borderRadius: '10px',
+                        padding: '13px 22px',
+                        background: '#087cff',
+                        color: '#ffffff',
+                        fontWeight: '700',
+                        cursor:
+                          isSubmittingHomework
+                            ? 'not-allowed'
+                            : 'pointer',
+                        opacity:
+                          isSubmittingHomework
+                            ? 0.65
+                            : 1,
+                      }}
+                    >
+                      {isSubmittingHomework
+                        ? 'Evaluating...'
+                        : 'Submit Homework'}
+                    </button>
+
+                    {evaluationStatus && (
+                      <div
+                        style={{
+                          marginTop: '14px',
+                          fontWeight: '700',
+                          color:
+                            evaluationStatus
+                              .toLowerCase()
+                              .includes(
+                                'failed'
+                              ) ||
+                            evaluationStatus
+                              .toLowerCase()
+                              .includes(
+                                'cannot'
+                              )
+                              ? '#d63b3b'
+                              : '#168447',
+                        }}
+                      >
+                        {evaluationStatus}
+                      </div>
+                    )}
+                  </div>
+
+
+                  {evaluationResult && (
+                    <div
+                      id="evaluation-report"
+                      className="exercise-section"
+                      style={{
+                        marginTop: '30px',
+                        padding: '24px',
+                        border: '1px solid #cbd5e1',
+                        borderRadius: '14px',
+                        background: '#ffffff',
+                      }}
+                    >
+                      <div className="exercise-title-row">
+                        <h3>
+                          📊 Homework Report
+                        </h3>
+
+                        <span className="exercise-badge">
+                          EVALUATED
+                        </span>
+                      </div>
+
+
+                      <div
+                        style={{
+                          display: 'grid',
+                          gridTemplateColumns:
+                            'repeat(auto-fit, minmax(150px, 1fr))',
+                          gap: '12px',
+                          marginTop: '20px',
+                          marginBottom: '24px',
+                        }}
+                      >
+                        <div
+                          style={{
+                            padding: '18px',
+                            borderRadius: '12px',
+                            background: '#eef6ff',
+                          }}
+                        >
+                          <div
+                            style={{
+                              color: '#64748b',
+                              fontSize: '13px',
+                            }}
+                          >
+                            Overall Score
+                          </div>
+
+                          <div
+                            style={{
+                              fontSize: '30px',
+                              fontWeight: '800',
+                              marginTop: '4px',
+                            }}
+                          >
+                            {evaluationResult
+                              ?.summary
+                              ?.overallScore ??
+                              0}%
+                          </div>
+                        </div>
+
+
+                        <div
+                          style={{
+                            padding: '18px',
+                            borderRadius: '12px',
+                            background: '#f8fafc',
+                          }}
+                        >
+                          <div
+                            style={{
+                              color: '#64748b',
+                              fontSize: '13px',
+                            }}
+                          >
+                            Questions
+                          </div>
+
+                          <div
+                            style={{
+                              fontSize: '30px',
+                              fontWeight: '800',
+                              marginTop: '4px',
+                            }}
+                          >
+                            {evaluationResult
+                              ?.summary
+                              ?.questionScore ??
+                              0}%
+                          </div>
+                        </div>
+
+
+                        {evaluationResult
+                          ?.writingResult
+                          ?.enabled ===
+                          true && (
+
+                          <div
+                            style={{
+                              padding: '18px',
+                              borderRadius: '12px',
+                              background: '#f8fafc',
+                            }}
+                          >
+                            <div
+                              style={{
+                                color: '#64748b',
+                                fontSize: '13px',
+                              }}
+                            >
+                              Writing
+                            </div>
+
+                            <div
+                              style={{
+                                fontSize: '30px',
+                                fontWeight: '800',
+                                marginTop: '4px',
+                              }}
+                            >
+                              {evaluationResult
+                                .writingResult
+                                .score ??
+                                0}%
+                            </div>
+                          </div>
+
+                        )}
+                      </div>
+
+
+                      {sectionScoreRows.length >
+                        0 && (
+
+                        <div
+                          style={{
+                            marginBottom: '26px',
+                          }}
+                        >
+                          <h4>
+                            Section Scores
+                          </h4>
+
+                          <div
+                            style={{
+                              display: 'grid',
+                              gridTemplateColumns:
+                                'repeat(auto-fit, minmax(180px, 1fr))',
+                              gap: '10px',
+                            }}
+                          >
+                            {sectionScoreRows.map(
+                              item => (
+                                <div
+                                  key={
+                                    item.sectionId
+                                  }
+                                  style={{
+                                    padding: '14px',
+                                    border: '1px solid #e2e8f0',
+                                    borderRadius: '10px',
+                                    background: '#f8fafc',
+                                  }}
+                                >
+                                  <div
+                                    style={{
+                                      fontWeight: '700',
+                                      marginBottom: '6px',
+                                    }}
+                                  >
+                                    {item.title}
+                                  </div>
+
+                                  <div
+                                    style={{
+                                      fontSize: '24px',
+                                      fontWeight: '800',
+                                    }}
+                                  >
+                                    {item.score}%
+                                  </div>
+                                </div>
+                              )
+                            )}
+                          </div>
+                        </div>
+
+                      )}
+
+
+                      {evaluationResult
+                        ?.writingResult
+                        ?.enabled ===
+                        true &&
+                        evaluationResult
+                          ?.writingResult
+                          ?.submitted ===
+                          true && (
+
+                        <div
+                          style={{
+                            marginBottom: '28px',
+                            padding: '18px',
+                            borderRadius: '12px',
+                            background: '#f8fafc',
+                          }}
+                        >
+                          <h4>
+                            Writing Evaluation
+                          </h4>
+
+                          <div
+                            style={{
+                              display: 'grid',
+                              gridTemplateColumns:
+                                'repeat(auto-fit, minmax(145px, 1fr))',
+                              gap: '8px',
+                              marginBottom: '16px',
+                            }}
+                          >
+                            {Object.entries(
+                              evaluationResult
+                                .writingResult
+                                .criteria ||
+                                {}
+                            ).map(
+                              ([
+                                criterion,
+                                score,
+                              ]) => (
+                                <div
+                                  key={
+                                    criterion
+                                  }
+                                  style={{
+                                    padding: '10px',
+                                    background: '#ffffff',
+                                    border: '1px solid #e2e8f0',
+                                    borderRadius: '9px',
+                                  }}
+                                >
+                                  <div
+                                    style={{
+                                      fontSize: '12px',
+                                      color: '#64748b',
+                                      wordBreak: 'break-word',
+                                    }}
+                                  >
+                                    {criterion}
+                                  </div>
+
+                                  <strong>
+                                    {score}/20
+                                  </strong>
+                                </div>
+                              )
+                            )}
+                          </div>
+
+                          {evaluationResult
+                            .writingResult
+                            .feedback && (
+
+                            <p
+                              style={{
+                                lineHeight: '1.7',
+                              }}
+                            >
+                              {evaluationResult
+                                .writingResult
+                                .feedback}
+                            </p>
+
+                          )}
+                        </div>
+
+                      )}
+
+
+                      {Array.isArray(
+                        evaluationResult
+                          ?.report
+                          ?.strengths
+                      ) &&
+                        evaluationResult
+                          .report
+                          .strengths
+                          .length > 0 && (
+
+                        <div
+                          style={{
+                            marginBottom: '20px',
+                          }}
+                        >
+                          <h4>
+                            Strengths
+                          </h4>
+
+                          <ul>
+                            {evaluationResult
+                              .report
+                              .strengths
+                              .map(
+                                (
+                                  item,
+                                  index
+                                ) => (
+                                  <li
+                                    key={
+                                      index
+                                    }
+                                  >
+                                    {item}
+                                  </li>
+                                )
+                              )}
+                          </ul>
+                        </div>
+
+                      )}
+
+
+                      {Array.isArray(
+                        evaluationResult
+                          ?.report
+                          ?.improvements
+                      ) &&
+                        evaluationResult
+                          .report
+                          .improvements
+                          .length > 0 && (
+
+                        <div
+                          style={{
+                            marginBottom: '20px',
+                          }}
+                        >
+                          <h4>
+                            Needs Improvement
+                          </h4>
+
+                          <ul>
+                            {evaluationResult
+                              .report
+                              .improvements
+                              .map(
+                                (
+                                  item,
+                                  index
+                                ) => (
+                                  <li
+                                    key={
+                                      index
+                                    }
+                                  >
+                                    {item}
+                                  </li>
+                                )
+                              )}
+                          </ul>
+                        </div>
+
+                      )}
+
+
+                      {evaluationResult
+                        ?.report
+                        ?.teacherComment && (
+
+                        <div
+                          style={{
+                            marginBottom: '26px',
+                            padding: '18px',
+                            borderRadius: '12px',
+                            background: '#eef6ff',
+                            lineHeight: '1.7',
+                          }}
+                        >
+                          <h4
+                            style={{
+                              marginTop: 0,
+                            }}
+                          >
+                            Teacher Feedback
+                          </h4>
+
+                          <p
+                            style={{
+                              marginBottom: 0,
+                            }}
+                          >
+                            {evaluationResult
+                              .report
+                              .teacherComment}
+                          </p>
+                        </div>
+
+                      )}
+
+
+                      {sortedEvaluationResults.length >
+                        0 && (
+
+                        <div>
+                          <h4>
+                            Question Feedback
+                          </h4>
+
+                          {sortedEvaluationResults.map(
+                            (result, index) => {
+                              const found =
+                                findQuestionForResult(
+                                  result
+                                )
+
+                              return (
+                                <div
+                                  key={
+                                    String(
+                                      result.sectionId
+                                    ) +
+                                    '-' +
+                                    String(
+                                      result.questionId
+                                    ) +
+                                    '-' +
+                                    index
+                                  }
+                                  style={{
+                                    marginBottom: '12px',
+                                    padding: '15px',
+                                    border: '1px solid #e2e8f0',
+                                    borderRadius: '10px',
+                                    background: '#f8fafc',
+                                  }}
+                                >
+                                  <div
+                                    style={{
+                                      display: 'flex',
+                                      justifyContent: 'space-between',
+                                      gap: '10px',
+                                      flexWrap: 'wrap',
+                                      marginBottom: '8px',
+                                    }}
+                                  >
+                                    <strong>
+                                      {found.section
+                                        ?.title ||
+                                        'Section ' +
+                                          result.sectionId}
+                                      {' — '}
+                                      Question{' '}
+                                      {result.questionId}
+                                    </strong>
+
+                                    <span
+                                      className="exercise-badge"
+                                    >
+                                      {result.score}/
+                                      {result.maxScore}
+                                    </span>
+                                  </div>
+
+                                  {found.question
+                                    ?.question && (
+
+                                    <div
+                                      style={{
+                                        marginBottom: '8px',
+                                        color: '#334155',
+                                      }}
+                                    >
+                                      {found.question
+                                        .question}
+                                    </div>
+
+                                  )}
+
+                                  {result.feedback && (
+                                    <div
+                                      style={{
+                                        color: '#475569',
+                                        lineHeight: '1.6',
+                                      }}
+                                    >
+                                      {result.feedback}
+                                    </div>
+                                  )}
+                                </div>
+                              )
+                            }
+                          )}
+                        </div>
+
+                      )}
+
+
+                      {evaluationResult
+                        ?.model && (
+
+                        <div
+                          style={{
+                            marginTop: '20px',
+                            fontSize: '12px',
+                            color: '#94a3b8',
+                          }}
+                        >
+                          AI evaluator:{' '}
+                          {evaluationResult.model}
+                        </div>
+
+                      )}
                     </div>
 
                   )}
