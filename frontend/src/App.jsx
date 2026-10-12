@@ -10,6 +10,9 @@ import {
 const API_URL =
   'https://156wo9pssc.execute-api.us-east-1.amazonaws.com'
 
+const MAX_PDF_SIZE_BYTES =
+  10 * 1024 * 1024
+
 
 async function getAccessToken() {
   const session = await fetchAuthSession()
@@ -249,6 +252,21 @@ export default function App() {
         'Please select a PDF file.'
       )
 
+      event.target.value = ''
+      return
+    }
+
+    if (
+      file.size >
+      MAX_PDF_SIZE_BYTES
+    ) {
+      setSelectedFile(null)
+
+      setUploadStatus(
+        'PDF is too large. Maximum file size is 10 MB.'
+      )
+
+      event.target.value = ''
       return
     }
 
@@ -685,6 +703,19 @@ export default function App() {
     if (!selectedFile) {
       setUploadStatus(
         'Please select a PDF first.'
+      )
+
+      return
+    }
+
+    if (
+      selectedFile.size >
+      MAX_PDF_SIZE_BYTES
+    ) {
+      setSelectedFile(null)
+
+      setUploadStatus(
+        'PDF is too large. Maximum file size is 10 MB.'
       )
 
       return
@@ -2132,7 +2163,7 @@ export default function App() {
                   </h2>
 
                   <p>
-                    PDF documents only
+                    PDF documents only • Maximum 10 MB
                   </p>
 
                 </div>
