@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 
 import {
   fetchAuthSession,
@@ -12,6 +12,27 @@ const API_URL =
 
 const MAX_PDF_SIZE_BYTES =
   10 * 1024 * 1024
+
+const LAST_HOMEWORK_KEY_PREFIX =
+  'vb:last-homework:'
+
+
+function getLastHomeworkStorageKey(
+  currentUser
+) {
+  const userId =
+    currentUser?.userId ||
+    currentUser?.username
+
+  if (!userId) {
+    return null
+  }
+
+  return (
+    LAST_HOMEWORK_KEY_PREFIX +
+    userId
+  )
+}
 
 
 async function getAccessToken() {
@@ -114,6 +135,45 @@ export default function App() {
 
 
   // ============================================
+  // AUTO-SAVE
+  // ============================================
+
+  const answersRef =
+    useRef({})
+
+  const writingResponseRef =
+    useRef('')
+
+  const progressDirtyRef =
+    useRef(false)
+
+  const progressLoadedRef =
+    useRef(false)
+
+  const saveInFlightRef =
+    useRef(false)
+
+  const resumeUserRef =
+    useRef('')
+
+  const [
+    autoSaveStatus,
+    setAutoSaveStatus,
+  ] = useState('')
+
+
+  useEffect(() => {
+    answersRef.current = answers
+  }, [answers])
+
+
+  useEffect(() => {
+    writingResponseRef.current =
+      writingResponse
+  }, [writingResponse])
+
+
+  // ============================================
   // HOMEWORK EVALUATION
   // ============================================
 
@@ -174,6 +234,33 @@ export default function App() {
   }, [])
 
 
+  useEffect(() => {
+    if (!user) {
+      return
+    }
+
+    const storageKey =
+      getLastHomeworkStorageKey(
+        user
+      )
+
+    if (
+      !storageKey ||
+      resumeUserRef.current ===
+        storageKey
+    ) {
+      return
+    }
+
+    resumeUserRef.current =
+      storageKey
+
+    resumeLastHomework(
+      user
+    )
+  }, [user])
+
+
   function resetHomework() {
     setHomeworkMetadata(null)
     setTargetLanguage([])
@@ -183,6 +270,13 @@ export default function App() {
     setAnswers({})
     setFeedback({})
     setWritingResponse('')
+
+    answersRef.current = {}
+    writingResponseRef.current = ''
+    progressDirtyRef.current = false
+    progressLoadedRef.current = false
+    saveInFlightRef.current = false
+    setAutoSaveStatus('')
 
     setIsSubmittingHomework(false)
     setEvaluationStatus('')
@@ -215,6 +309,8 @@ export default function App() {
       setDocId('')
       setProcessingMessage('')
       setCurrentStep(1)
+
+      resumeUserRef.current = ''
 
       resetHomework()
     } catch (error) {
@@ -374,6 +470,26 @@ export default function App() {
   }
 
 
+  function markProgressDirty() {
+    if (!progressLoadedRef.current) {
+      return
+    }
+
+    progressDirtyRef.current = true
+    setAutoSaveStatus(
+      'Changes pending...'
+    )
+  }
+
+
+  function handleWritingResponseChange(
+    value
+  ) {
+    setWritingResponse(value)
+    markProgressDirty()
+  }
+
+
   function handleChoiceAnswer(
     key,
     selectedOption,
@@ -383,6 +499,8 @@ export default function App() {
       ...prev,
       [key]: selectedOption,
     }))
+
+    markProgressDirty()
 
     if (
       question?.evaluationMode ===
@@ -414,6 +532,8 @@ export default function App() {
       ...prev,
       [key]: value,
     }))
+
+    markProgressDirty()
 
     setFeedback(prev => {
       const updated = {
@@ -472,6 +592,8 @@ export default function App() {
           value,
       },
     }))
+
+    markProgressDirty()
 
     setFeedback(prev => {
       const updated = {
@@ -551,6 +673,342 @@ export default function App() {
   // ============================================
   // API
   // ============================================
+
+  function applyHomeworkData(data) {
+    setHomeworkMetadata(
+      data?.metadata || null
+    )
+
+    setTargetLanguage(
+      Array.isArray(
+        data?.targetLanguage
+      )
+        ? data.targetLanguage
+        : []
+    )
+
+    setSections(
+      Array.isArray(
+        data?.sections
+      )
+        ? data.sections
+        : []
+    )
+
+    setWritingTask(
+      data?.writingTask || null
+    )
+
+    setLegacyMcq(
+      Array.isArray(data?.mcq)
+        ? data.mcq
+        : []
+    )
+
+    setLegacyFill(
+      Array.isArray(
+        data?.fillInTheBlank
+      )
+        ? data.fillInTheBlank
+        : []
+    )
+  }
+
+
+  async function resumeLastHomework(
+    currentUser
+  ) {
+    const storageKey =
+      getLastHomeworkStorageKey(
+        currentUser
+      )
+
+    if (!storageKey) {
+      return
+    }
+
+    const savedDocId =
+      window.localStorage.getItem(
+        storageKey
+      )
+
+    if (!savedDocId) {
+      return
+    }
+
+    setDocId(savedDocId)
+    setCurrentStep(2)
+    setProcessingMessage(
+      'Restoring your last homework...'
+    )
+
+    try {
+      const data =
+        await fetchDocumentStatus(
+          savedDocId
+        )
+
+      if (!data) {
+        window.localStorage.removeItem(
+          storageKey
+        )
+
+        setDocId('')
+        setCurrentStep(1)
+        setProcessingMessage('')
+        return
+      }
+
+      const status =
+        data.status || 'UNKNOWN'
+
+      setProcessingMessage(
+        getStatusMessage(status)
+      )
+
+      if (
+        status ===
+        'EXERCISES_DONE'
+      ) {
+        applyHomeworkData(data)
+
+        await restoreHomeworkProgress(
+          savedDocId
+        )
+
+        setCurrentStep(3)
+        return
+      }
+
+      await pollDocumentStatus(
+        savedDocId
+      )
+
+    } catch (error) {
+      console.error(
+        'Resume homework error:',
+        error
+      )
+
+      setProcessingMessage(
+        'Could not restore your last homework.'
+      )
+    }
+  }
+
+
+  async function restoreHomeworkProgress(
+    currentDocId
+  ) {
+    progressLoadedRef.current = false
+
+    try {
+      const accessToken =
+        await getAccessToken()
+
+      const response =
+        await fetch(
+          API_URL +
+            '/documents/' +
+            encodeURIComponent(
+              currentDocId
+            ) +
+            '/progress',
+          {
+            method: 'GET',
+
+            headers: {
+              Authorization:
+                'Bearer ' +
+                accessToken,
+            },
+          }
+        )
+
+      if (!response.ok) {
+        const errorText =
+          await response.text()
+
+        throw new Error(
+          'Progress restore failed: ' +
+            response.status +
+            ' ' +
+            errorText
+        )
+      }
+
+      const data =
+        await response.json()
+
+      const restoredAnswers =
+        data?.answers &&
+        typeof data.answers ===
+          'object' &&
+        !Array.isArray(
+          data.answers
+        )
+          ? data.answers
+          : {}
+
+      const restoredWriting =
+        typeof data?.writingAnswer ===
+        'string'
+          ? data.writingAnswer
+          : ''
+
+      answersRef.current =
+        restoredAnswers
+
+      writingResponseRef.current =
+        restoredWriting
+
+      setAnswers(
+        restoredAnswers
+      )
+
+      setWritingResponse(
+        restoredWriting
+      )
+
+      progressDirtyRef.current = false
+      progressLoadedRef.current = true
+
+      if (data?.found) {
+        setAutoSaveStatus(
+          'Saved progress restored ✅'
+        )
+      } else {
+        setAutoSaveStatus(
+          'Auto-save ready'
+        )
+      }
+
+    } catch (error) {
+      console.error(
+        'Progress restore error:',
+        error
+      )
+
+      setAutoSaveStatus(
+        'Could not restore saved progress.'
+      )
+    }
+  }
+
+
+  async function saveHomeworkProgress(
+    currentDocId
+  ) {
+    if (
+      !currentDocId ||
+      !progressLoadedRef.current ||
+      !progressDirtyRef.current ||
+      saveInFlightRef.current
+    ) {
+      return
+    }
+
+    const snapshot = {
+      answers:
+        answersRef.current,
+
+      writingAnswer:
+        writingResponseRef.current,
+    }
+
+    const snapshotJson =
+      JSON.stringify(snapshot)
+
+    saveInFlightRef.current = true
+
+    setAutoSaveStatus(
+      'Saving...'
+    )
+
+    try {
+      const accessToken =
+        await getAccessToken()
+
+      const response =
+        await fetch(
+          API_URL +
+            '/documents/' +
+            encodeURIComponent(
+              currentDocId
+            ) +
+            '/progress',
+          {
+            method: 'POST',
+
+            headers: {
+              Authorization:
+                'Bearer ' +
+                accessToken,
+
+              'Content-Type':
+                'application/json',
+            },
+
+            body:
+              snapshotJson,
+          }
+        )
+
+      if (!response.ok) {
+        const errorText =
+          await response.text()
+
+        throw new Error(
+          'Progress save failed: ' +
+            response.status +
+            ' ' +
+            errorText
+        )
+      }
+
+      const currentSnapshotJson =
+        JSON.stringify({
+          answers:
+            answersRef.current,
+
+          writingAnswer:
+            writingResponseRef.current,
+        })
+
+      if (
+        currentSnapshotJson ===
+        snapshotJson
+      ) {
+        progressDirtyRef.current = false
+
+        setAutoSaveStatus(
+          'Saved ✅'
+        )
+      } else {
+        progressDirtyRef.current = true
+
+        setAutoSaveStatus(
+          'Changes pending...'
+        )
+      }
+
+    } catch (error) {
+      console.error(
+        'Auto-save error:',
+        error
+      )
+
+      progressDirtyRef.current = true
+
+      setAutoSaveStatus(
+        'Auto-save failed — will retry.'
+      )
+
+    } finally {
+      saveInFlightRef.current = false
+    }
+  }
+
 
   async function fetchDocumentStatus(
     currentDocId
@@ -633,50 +1091,13 @@ export default function App() {
           'EXERCISES_DONE'
         ) {
 
-          // NEW STRUCTURE
-
-          setHomeworkMetadata(
-            data.metadata || null
+          applyHomeworkData(
+            data
           )
 
-          setTargetLanguage(
-            Array.isArray(
-              data.targetLanguage
-            )
-              ? data.targetLanguage
-              : []
+          await restoreHomeworkProgress(
+            currentDocId
           )
-
-          setSections(
-            Array.isArray(
-              data.sections
-            )
-              ? data.sections
-              : []
-          )
-
-          setWritingTask(
-            data.writingTask ||
-              null
-          )
-
-
-          // OLD STRUCTURE SUPPORT
-
-          setLegacyMcq(
-            Array.isArray(data.mcq)
-              ? data.mcq
-              : []
-          )
-
-          setLegacyFill(
-            Array.isArray(
-              data.fillInTheBlank
-            )
-              ? data.fillInTheBlank
-              : []
-          )
-
 
           setCurrentStep(3)
 
@@ -697,6 +1118,33 @@ export default function App() {
       'Processing is taking longer than expected.'
     )
   }
+
+
+  useEffect(() => {
+    if (
+      !user ||
+      !docId ||
+      currentStep !== 3
+    ) {
+      return undefined
+    }
+
+    const intervalId =
+      window.setInterval(
+        () => {
+          saveHomeworkProgress(
+            docId
+          )
+        },
+        5000
+      )
+
+    return () => {
+      window.clearInterval(
+        intervalId
+      )
+    }
+  }, [user, docId, currentStep])
 
 
   async function handleUpload() {
@@ -841,6 +1289,18 @@ export default function App() {
       uploadSucceeded =
         true
 
+      const storageKey =
+        getLastHomeworkStorageKey(
+          user
+        )
+
+      if (storageKey) {
+        window.localStorage.setItem(
+          storageKey,
+          currentDocId
+        )
+      }
+
     } catch (error) {
       console.error(
         'Upload error:',
@@ -952,6 +1412,10 @@ export default function App() {
     setEvaluationResult(null)
 
     try {
+      await saveHomeworkProgress(
+        docId
+      )
+
       const accessToken =
         await getAccessToken()
 
@@ -2810,7 +3274,7 @@ export default function App() {
                         }
                         onChange={
                           event =>
-                            setWritingResponse(
+                            handleWritingResponseChange(
                               event
                                 .target
                                 .value
@@ -2961,6 +3425,27 @@ export default function App() {
                       open-response and writing tasks are
                       reviewed by AI.
                     </p>
+
+                    {autoSaveStatus && (
+                      <div
+                        style={{
+                          marginBottom: '14px',
+                          fontSize: '13px',
+                          fontWeight: '700',
+                          color: autoSaveStatus
+                            .toLowerCase()
+                            .includes('failed') ||
+                          autoSaveStatus
+                            .toLowerCase()
+                            .includes('could not')
+                              ? '#d63b3b'
+                              : '#64748b',
+                        }}
+                      >
+                        💾 {autoSaveStatus}
+                      </div>
+                    )}
+
 
                     <button
                       type="button"
