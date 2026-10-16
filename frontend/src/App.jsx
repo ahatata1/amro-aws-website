@@ -1,10 +1,14 @@
 import { useEffect, useRef, useState } from 'react'
 
 import {
+  confirmSignUp,
   fetchAuthSession,
+  fetchUserAttributes,
   getCurrentUser,
+  resendSignUpCode,
   signInWithRedirect,
   signOut,
+  signUp,
 } from 'aws-amplify/auth'
 
 const API_URL =
@@ -72,8 +76,36 @@ export default function App() {
   const [user, setUser] =
     useState(null)
 
+  const [studentName, setStudentName] =
+    useState('')
+
   const [loadingUser, setLoadingUser] =
     useState(true)
+
+  // ============================================
+  // SIGN UP
+  // ============================================
+
+  const [authMode, setAuthMode] =
+    useState('signin')
+
+  const [signupName, setSignupName] =
+    useState('')
+
+  const [signupEmail, setSignupEmail] =
+    useState('')
+
+  const [signupPassword, setSignupPassword] =
+    useState('')
+
+  const [signupCode, setSignupCode] =
+    useState('')
+
+  const [signupStatus, setSignupStatus] =
+    useState('')
+
+  const [signupBusy, setSignupBusy] =
+    useState(false)
 
   const [selectedFile, setSelectedFile] =
     useState(null)
@@ -219,12 +251,38 @@ export default function App() {
           await getCurrentUser()
 
         setUser(currentUser)
+
+        try {
+          const attributes =
+            await fetchUserAttributes()
+
+          setStudentName(
+            attributes?.name ||
+            currentUser
+              .signInDetails
+              ?.loginId ||
+            'Student'
+          )
+        } catch (attributeError) {
+          console.error(
+            'Could not load user name:',
+            attributeError
+          )
+
+          setStudentName(
+            currentUser
+              .signInDetails
+              ?.loginId ||
+            'Student'
+          )
+        }
       } catch (error) {
         console.log(
           'User is not signed in'
         )
 
         setUser(null)
+        setStudentName('')
       } finally {
         setLoadingUser(false)
       }
@@ -299,11 +357,228 @@ export default function App() {
   }
 
 
+  function resetSignupForm() {
+    setSignupName('')
+    setSignupEmail('')
+    setSignupPassword('')
+    setSignupCode('')
+    setSignupStatus('')
+    setSignupBusy(false)
+  }
+
+
+  function showSignIn() {
+    resetSignupForm()
+    setAuthMode('signin')
+  }
+
+
+  function showSignUp() {
+    resetSignupForm()
+    setAuthMode('signup')
+  }
+
+
+  async function handleSignUp(event) {
+    event.preventDefault()
+
+    const name = signupName.trim()
+    const email = signupEmail
+      .trim()
+      .toLowerCase()
+
+    if (!name) {
+      setSignupStatus(
+        'Please enter your name.'
+      )
+      return
+    }
+
+    if (!email) {
+      setSignupStatus(
+        'Please enter your email.'
+      )
+      return
+    }
+
+    if (!signupPassword) {
+      setSignupStatus(
+        'Please enter a password.'
+      )
+      return
+    }
+
+    setSignupBusy(true)
+    setSignupStatus(
+      'Creating your account...'
+    )
+
+    try {
+      const result = await signUp({
+        username: email,
+        password: signupPassword,
+        options: {
+          userAttributes: {
+            email,
+            name,
+          },
+        },
+      })
+
+      if (
+        result?.nextStep?.signUpStep ===
+        'CONFIRM_SIGN_UP'
+      ) {
+        setAuthMode('confirm')
+        setSignupStatus(
+          'Check your email for the confirmation code.'
+        )
+        return
+      }
+
+      if (
+        result?.nextStep?.signUpStep ===
+        'DONE'
+      ) {
+        setAuthMode('signin')
+        setSignupStatus(
+          'Account created ✅ Sign in to continue.'
+        )
+        return
+      }
+
+      setSignupStatus(
+        'Account created. Follow the next sign-up step.'
+      )
+
+    } catch (error) {
+      console.error(
+        'Sign-up error:',
+        error
+      )
+
+      setSignupStatus(
+        error?.message ||
+        'Could not create the account.'
+      )
+
+    } finally {
+      setSignupBusy(false)
+    }
+  }
+
+
+  async function handleConfirmSignUp(event) {
+    event.preventDefault()
+
+    const email = signupEmail
+      .trim()
+      .toLowerCase()
+
+    const code = signupCode.trim()
+
+    if (!email || !code) {
+      setSignupStatus(
+        'Enter the confirmation code from your email.'
+      )
+      return
+    }
+
+    setSignupBusy(true)
+    setSignupStatus(
+      'Confirming your account...'
+    )
+
+    try {
+      const result =
+        await confirmSignUp({
+          username: email,
+          confirmationCode: code,
+        })
+
+      if (
+        result?.nextStep?.signUpStep ===
+        'DONE'
+      ) {
+        setAuthMode('signin')
+        setSignupPassword('')
+        setSignupCode('')
+        setSignupStatus(
+          'Account confirmed ✅ Sign in to continue.'
+        )
+        return
+      }
+
+      setSignupStatus(
+        'Confirmation completed. Sign in to continue.'
+      )
+
+    } catch (error) {
+      console.error(
+        'Confirm sign-up error:',
+        error
+      )
+
+      setSignupStatus(
+        error?.message ||
+        'Could not confirm the account.'
+      )
+
+    } finally {
+      setSignupBusy(false)
+    }
+  }
+
+
+  async function handleResendCode() {
+    const email = signupEmail
+      .trim()
+      .toLowerCase()
+
+    if (!email) {
+      setSignupStatus(
+        'Enter your email first.'
+      )
+      return
+    }
+
+    setSignupBusy(true)
+    setSignupStatus(
+      'Sending a new code...'
+    )
+
+    try {
+      await resendSignUpCode({
+        username: email,
+      })
+
+      setSignupStatus(
+        'A new confirmation code was sent.'
+      )
+
+    } catch (error) {
+      console.error(
+        'Resend code error:',
+        error
+      )
+
+      setSignupStatus(
+        error?.message ||
+        'Could not resend the code.'
+      )
+
+    } finally {
+      setSignupBusy(false)
+    }
+  }
+
+
   async function handleLogout() {
     try {
       await signOut()
 
       setUser(null)
+      setStudentName('')
       setSelectedFile(null)
       setUploadStatus('')
       setDocId('')
@@ -2176,13 +2451,255 @@ export default function App() {
           </p>
 
 
-          <button
-            onClick={
-              handleLogin
-            }
-          >
-            Sign In to Continue
-          </button>
+          {authMode === 'signin' && (
+            <>
+              <button
+                onClick={
+                  handleLogin
+                }
+              >
+                Sign In to Continue
+              </button>
+
+              <button
+                type="button"
+                onClick={
+                  showSignUp
+                }
+                style={{
+                  marginTop: '12px',
+                  background: '#ffffff',
+                  color: '#087cff',
+                  border: '1px solid #087cff',
+                }}
+              >
+                Create Account
+              </button>
+
+              {signupStatus && (
+                <div
+                  style={{
+                    marginTop: '14px',
+                    fontSize: '14px',
+                    lineHeight: '1.5',
+                    color: '#475569',
+                  }}
+                >
+                  {signupStatus}
+                </div>
+              )}
+            </>
+          )}
+
+
+          {authMode === 'signup' && (
+            <form
+              onSubmit={
+                handleSignUp
+              }
+              style={{
+                marginTop: '20px',
+              }}
+            >
+              <input
+                type="text"
+                value={signupName}
+                onChange={
+                  event =>
+                    setSignupName(
+                      event.target.value
+                    )
+                }
+                placeholder="Full name"
+                autoComplete="name"
+                style={{
+                  width: '100%',
+                  boxSizing: 'border-box',
+                  marginBottom: '10px',
+                  padding: '12px',
+                  borderRadius: '8px',
+                  border: '1px solid #cbd5e1',
+                }}
+              />
+
+              <input
+                type="email"
+                value={signupEmail}
+                onChange={
+                  event =>
+                    setSignupEmail(
+                      event.target.value
+                    )
+                }
+                placeholder="Email"
+                autoComplete="email"
+                style={{
+                  width: '100%',
+                  boxSizing: 'border-box',
+                  marginBottom: '10px',
+                  padding: '12px',
+                  borderRadius: '8px',
+                  border: '1px solid #cbd5e1',
+                }}
+              />
+
+              <input
+                type="password"
+                value={signupPassword}
+                onChange={
+                  event =>
+                    setSignupPassword(
+                      event.target.value
+                    )
+                }
+                placeholder="Password"
+                autoComplete="new-password"
+                style={{
+                  width: '100%',
+                  boxSizing: 'border-box',
+                  marginBottom: '12px',
+                  padding: '12px',
+                  borderRadius: '8px',
+                  border: '1px solid #cbd5e1',
+                }}
+              />
+
+              <button
+                type="submit"
+                disabled={signupBusy}
+              >
+                {signupBusy
+                  ? 'Creating Account...'
+                  : 'Create Account'}
+              </button>
+
+              <button
+                type="button"
+                onClick={showSignIn}
+                disabled={signupBusy}
+                style={{
+                  marginTop: '12px',
+                  background: '#ffffff',
+                  color: '#475569',
+                  border: '1px solid #cbd5e1',
+                }}
+              >
+                Back to Sign In
+              </button>
+
+              {signupStatus && (
+                <div
+                  style={{
+                    marginTop: '14px',
+                    fontSize: '14px',
+                    lineHeight: '1.5',
+                    color: '#475569',
+                  }}
+                >
+                  {signupStatus}
+                </div>
+              )}
+            </form>
+          )}
+
+
+          {authMode === 'confirm' && (
+            <form
+              onSubmit={
+                handleConfirmSignUp
+              }
+              style={{
+                marginTop: '20px',
+              }}
+            >
+              <div
+                style={{
+                  marginBottom: '12px',
+                  fontSize: '14px',
+                  color: '#475569',
+                  lineHeight: '1.5',
+                }}
+              >
+                We sent a confirmation code to:
+                <br />
+                <strong>{signupEmail}</strong>
+              </div>
+
+              <input
+                type="text"
+                value={signupCode}
+                onChange={
+                  event =>
+                    setSignupCode(
+                      event.target.value
+                    )
+                }
+                placeholder="Confirmation code"
+                inputMode="numeric"
+                autoComplete="one-time-code"
+                style={{
+                  width: '100%',
+                  boxSizing: 'border-box',
+                  marginBottom: '12px',
+                  padding: '12px',
+                  borderRadius: '8px',
+                  border: '1px solid #cbd5e1',
+                }}
+              />
+
+              <button
+                type="submit"
+                disabled={signupBusy}
+              >
+                {signupBusy
+                  ? 'Confirming...'
+                  : 'Confirm Account'}
+              </button>
+
+              <button
+                type="button"
+                onClick={
+                  handleResendCode
+                }
+                disabled={signupBusy}
+                style={{
+                  marginTop: '12px',
+                  background: '#ffffff',
+                  color: '#087cff',
+                  border: '1px solid #087cff',
+                }}
+              >
+                Resend Code
+              </button>
+
+              <button
+                type="button"
+                onClick={showSignIn}
+                disabled={signupBusy}
+                style={{
+                  marginTop: '12px',
+                  background: '#ffffff',
+                  color: '#475569',
+                  border: '1px solid #cbd5e1',
+                }}
+              >
+                Back to Sign In
+              </button>
+
+              {signupStatus && (
+                <div
+                  style={{
+                    marginTop: '14px',
+                    fontSize: '14px',
+                    lineHeight: '1.5',
+                    color: '#475569',
+                  }}
+                >
+                  {signupStatus}
+                </div>
+              )}
+            </form>
+          )}
 
         </div>
 
@@ -2206,6 +2723,7 @@ export default function App() {
 
 
   const displayName =
+    studentName ||
     user.signInDetails
       ?.loginId ||
     'Student'

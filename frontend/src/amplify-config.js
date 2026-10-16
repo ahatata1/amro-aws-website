@@ -10,7 +10,8 @@ export const amplifyConfig = {
 
           scopes: [
             'openid',
-            'email'
+            'email' ,
+            'aws.cognito.signin.user.admin'
           ],
 
           redirectSignIn: [
